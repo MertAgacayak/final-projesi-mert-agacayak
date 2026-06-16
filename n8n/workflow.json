@@ -1,0 +1,161 @@
+{
+  "name": "Sınav Pusulası — Konu & Video Üretici (OpenAI)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sinav-pusulasi",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 320],
+      "webhookId": "sinav-pusulasi"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst body = item.body || item;\nconst courseQuery = (body.courseQuery || '').toString().trim();\nconst examType = body.examType === 'final' ? 'final' : 'vize';\nif (courseQuery.length < 2) {\n  return [{ json: { invalid: true, courseQuery, examType, error: { success: false, error: { code: 'INVALID_INPUT', stage: 'input_validation', message: 'Ders adı/kodu geçersiz (en az 2 karakter).' } } } }];\n}\nconst examTr = examType === 'final' ? 'FİNAL (dönemin tamamı)' : 'VİZE (dönemin ilk yarısı)';\nconst prompt = 'Manisa Celal Bayar Üniversitesi öğrencisi için sınav hazırlık asistanısın. Ders: \"' + courseQuery + '\". Sınav: ' + examTr + '. Bu dersin tipik müfredatını (syllabus) dikkate alarak bu sınavda çıkması beklenen ana konuları belirle. SADECE şu JSON şemasıyla yanıt ver: {\"course\":{\"code\":\"\",\"name\":\"\"},\"topics\":[{\"title\":\"\",\"description\":\"\",\"importance\":\"yüksek|orta|düşük\",\"videos\":[{\"title\":\"\",\"channel\":\"\",\"searchQuery\":\"\"}]}]}. Her konu için 1-3 adet YouTube eğitim videosu öner; GERÇEK video kimliği UYDURMA, bunun yerine Türkçe bir YouTube arama sorgusu (searchQuery) ver. Tüm metinler Türkçe olsun.';\nreturn [{ json: { invalid: false, courseQuery, examType, prompt } }];"
+      },
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "Hazırla & Doğrula",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "cond-invalid",
+              "leftValue": "={{ $json.invalid }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "Geçerli mi?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 320]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $json.prompt }}",
+              "role": "user"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444444",
+      "name": "OpenAI Model",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [920, 420],
+      "credentials": {
+        "openAiApi": {
+          "id": "OPENAI_CRED_ID",
+          "name": "OpenAi account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const g = $input.first().json;\nconst ctx = $('Hazırla & Doğrula').first().json;\nconst examType = ctx.examType || 'vize';\nconst courseQuery = ctx.courseQuery || '';\nfunction errOut(code, stage, message) {\n  return [{ json: { response: { success: false, error: { code, stage, message } } } }];\n}\nif (g && g.error) {\n  const m = (g.error && (g.error.message || g.error.reason)) || JSON.stringify(g.error);\n  return errOut('OPENAI_ERROR', 'model_generation', 'OpenAI çağrısı başarısız: ' + m);\n}\n// OpenAI 'Message a Model' çıktısı n8n sürümüne göre farklı konumda olabilir; hepsini dene\nlet raw;\nif (g && g.message && g.message.content !== undefined) raw = g.message.content;\nelse if (g && g.content !== undefined) raw = g.content;\nelse if (g && g.text !== undefined) raw = g.text;\nelse if (g && g.choices && g.choices[0] && g.choices[0].message) raw = g.choices[0].message.content;\nlet parsed;\ntry {\n  if (raw === undefined || raw === null || raw === '') throw new Error('Model boş yanıt döndürdü.');\n  parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;\n} catch (e) {\n  return errOut('SCHEMA_INVALID', 'response_format', 'Model yanıtı çözümlenemedi: ' + e.message);\n}\nconst topics = Array.isArray(parsed.topics) ? parsed.topics : [];\nif (!topics.length) {\n  return errOut('SYLLABUS_NOT_FOUND', 'syllabus_fetch', 'Bu ders için konu üretilemedi.');\n}\nconst model = (g && g.model) || (g && g.message && g.message.model) || 'openai';\nconst response = { success: true, source: 'n8n', course: parsed.course || { code: '', name: courseQuery }, examType, topics, meta: { model, generatedAt: new Date().toISOString() } };\nreturn [{ json: { response } }];"
+      },
+      "id": "55555555-5555-5555-5555-555555555555",
+      "name": "Yanıtı Biçimlendir",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 420]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "66666666-6666-6666-6666-666666666666",
+      "name": "Başarılı Yanıt",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1360, 420]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.error }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "id": "77777777-7777-7777-7777-777777777777",
+      "name": "Hata Yanıtı",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 200]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Hazırla & Doğrula", "type": "main", "index": 0 }]]
+    },
+    "Hazırla & Doğrula": {
+      "main": [[{ "node": "Geçerli mi?", "type": "main", "index": 0 }]]
+    },
+    "Geçerli mi?": {
+      "main": [
+        [{ "node": "Hata Yanıtı", "type": "main", "index": 0 }],
+        [{ "node": "OpenAI Model", "type": "main", "index": 0 }]
+      ]
+    },
+    "OpenAI Model": {
+      "main": [[{ "node": "Yanıtı Biçimlendir", "type": "main", "index": 0 }]]
+    },
+    "Yanıtı Biçimlendir": {
+      "main": [[{ "node": "Başarılı Yanıt", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "pinData": {},
+  "meta": {
+    "templateName": "Sınav Pusulası",
+    "description": "Ders adı/kodu + vize/final alır; OpenAI 'Message a Model' düğümüyle sınav konularını ve YouTube arama önerilerini üretip standart JSON döndürür."
+  }
+}
