@@ -1,0 +1,19 @@
+# OS / editör
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Bağımlılık / build (bu proje statik; build yok)
+node_modules/
+dist/
+
+# Claude Code / yerel önizleme yapılandırması
+.claude/
+
+# Gizli / yerel yapılandırma — sırlar asla commit edilmez
+*.local
+.env
+.env.*
+secrets*.json
