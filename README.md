@@ -121,3 +121,6 @@ git push -u origin main
   her zaman geçerli bir arama sonucuna yönlenir (404 olmaz).
 - Loglar tarayıcıda `localStorage`’da tutulur (cihaza özel). Kalıcı/sunucu tarafı
   günlükleme isteniyorsa n8n akışına bir veritabanı düğümü eklenebilir.
+
+## Ürünün Tanıtım videosu
+- https://youtu.be/BY7cBnEBv4U
